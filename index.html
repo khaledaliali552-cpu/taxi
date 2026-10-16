@@ -45,7 +45,6 @@
       z-index: 20;
     }
 
-    /* زر التوقف المؤقت */
     .btn-pause {
       pointer-events: auto;
       width: clamp(38px, 6vw, 46px);
@@ -62,7 +61,6 @@
       box-shadow: 0 4px 10px rgba(0,0,0,0.5);
     }
 
-    /* عداد السرعة الكلاسيكي (أعلى اليسار) */
     .speedo-wrap {
       position: absolute;
       top: 0;
@@ -118,7 +116,6 @@
       color: #bbb;
     }
 
-    /* مهمة المشوار (أعلى المنتصف) */
     .mission-card {
       background: rgba(35, 33, 28, 0.92);
       border: 2.5px solid #5a5444;
@@ -145,7 +142,6 @@
       font-size: clamp(9px, 1.3vw, 11px);
     }
 
-    /* الميني ماب (أعلى اليمين) */
     .minimap-wrap {
       width: clamp(75px, 13vw, 105px);
       height: clamp(75px, 13vw, 105px);
@@ -192,7 +188,6 @@
       font-weight: bold;
     }
 
-    /* فقاعة الإفيهات الشعبية */
     #ephe-balloon {
       position: absolute;
       top: 15%;
@@ -230,7 +225,6 @@
       z-index: 20;
     }
 
-    /* اليسار: الدركسيون وزر النيترو */
     .steer-group {
       display: flex;
       align-items: flex-end;
@@ -277,7 +271,6 @@
       border-color: #fff;
     }
 
-    /* اليمين: البدالات والمشروب */
     .pedal-group {
       display: flex;
       align-items: flex-end;
@@ -315,11 +308,9 @@
 <div id="game-container">
   <canvas id="canvas"></canvas>
 
-  <!-- زر إيقاف -->
   <div class="top-ui">
     <div class="btn-pause">❚❚</div>
 
-    <!-- عداد السرعة الكلاسيكي -->
     <div class="speedo-wrap">
       <span class="speed-lbl">كم/س</span>
       <div class="needle" id="needle"></div>
@@ -327,14 +318,12 @@
       <div class="digital-speed" id="digital-speed">00</div>
     </div>
 
-    <!-- لافتة كوبري ستانلي -->
     <div class="mission-card">
       <div class="mission-title">مهمة المشوار</div>
       <div class="mission-desc">الوصول إلى كوبري ستانلي</div>
       <div class="mission-sub">Stanley Bridge in 1.5 km</div>
     </div>
 
-    <!-- الميني ماب -->
     <div class="minimap-wrap">
       <div class="minimap-path">
         <div class="minimap-car-arrow"></div>
@@ -343,10 +332,8 @@
     </div>
   </div>
 
-  <!-- فقاعة الإفيهات الكوميدية -->
   <div id="ephe-balloon">وديني عند حمو علاء أخدلي صورتين!</div>
 
-  <!-- أدوات التحكم السفلية -->
   <div class="bottom-ui">
     <div class="steer-group">
       <div class="wheel-disc" id="steer-wheel">
@@ -366,33 +353,58 @@
 </div>
 
 <script>
-  // ================= محرك الرسم الكرتوني (Cel-Shaded Alexandria Canvas) =================
+  // ================= محرك الرسم الكرتوني المحسن =================
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
 
   let width = (canvas.width = window.innerWidth);
   let height = (canvas.height = window.innerHeight);
 
+  // التخزين المؤقت للتدرجات اللونية لتجنب إنشائها المتكرر
+  let skyGradient = null;
+  let seaGradient = null;
+
+  function updateCachedGradients() {
+    skyGradient = ctx.createLinearGradient(0, 0, 0, height * 0.45);
+    skyGradient.addColorStop(0, '#e8b87e');
+    skyGradient.addColorStop(0.5, '#f3cf9c');
+    skyGradient.addColorStop(1, '#fadcb0');
+
+    seaGradient = ctx.createLinearGradient(0, height * 0.42, width * 0.35, height);
+    seaGradient.addColorStop(0, '#53a8be');
+    seaGradient.addColorStop(0.6, '#41b3ce');
+    seaGradient.addColorStop(1, '#2ba4c2');
+  }
+  updateCachedGradients();
+
   window.addEventListener('resize', () => {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
+    updateCachedGradients();
   });
+
+  // بيانات المباني الثابتة لمنع إعادة إنشائها في كل فريم
+  const STATIC_BUILDINGS = [
+    { wRatio: 0.08, h: 220, color: '#f3d1a4', xRatio: 0.68 },
+    { wRatio: 0.09, h: 270, color: '#de8951', xRatio: 0.77 },
+    { wRatio: 0.10, h: 320, color: '#d9a36d', xRatio: 0.86 },
+    { wRatio: 0.11, h: 350, color: '#f4cca2', xRatio: 0.95 }
+  ];
 
   // حالة القيادة
   let speed = 0;
-  let maxSpeed = 80;
-  let playerX = 0; // -1 (يسار الكورنيش) إلى 1 (يمين عند العمارات)
+  const maxSpeed = 80;
+  let playerX = 0;
   let steerAngle = 0;
   let roadOffset = 0;
-  let distanceLeft = 1.5;
 
   const inputs = { gas: false, brake: false, nitro: false };
 
   // ربط البدالات
   const bindTouch = (id, key) => {
     const el = document.getElementById(id);
-    el.addEventListener('touchstart', e => { e.preventDefault(); inputs[key] = true; });
-    el.addEventListener('touchend', e => { e.preventDefault(); inputs[key] = false; });
+    el.addEventListener('touchstart', e => { e.preventDefault(); inputs[key] = true; }, { passive: false });
+    el.addEventListener('touchend', e => { e.preventDefault(); inputs[key] = false; }, { passive: false });
     el.addEventListener('mousedown', () => inputs[key] = true);
     el.addEventListener('mouseup', () => inputs[key] = false);
   };
@@ -408,20 +420,22 @@
   wheel.addEventListener('touchstart', e => {
     isDragging = true;
     startTouchX = e.touches[0].clientX;
-  });
+  }, { passive: true });
+
   window.addEventListener('touchmove', e => {
     if (!isDragging) return;
     const diff = e.touches[0].clientX - startTouchX;
     steerAngle = Math.max(-50, Math.min(50, diff * 0.6));
     wheel.style.transform = `rotate(${steerAngle}deg)`;
-  });
+  }, { passive: true });
+
   window.addEventListener('touchend', () => {
     isDragging = false;
     steerAngle = 0;
     wheel.style.transform = `rotate(0deg)`;
   });
 
-  // دعم كيبورد الكمبيوتر
+  // دعم لوحة المفاتيح
   window.addEventListener('keydown', e => {
     if (['ArrowUp', 'KeyW'].includes(e.code)) inputs.gas = true;
     if (['ArrowDown', 'KeyS'].includes(e.code)) inputs.brake = true;
@@ -438,33 +452,26 @@
     }
   });
 
-  // حركة سيارات المرور
+  // سيارات المرور
   const traffic = [
     { x: -0.3, z: 400, type: 'microbus', color: '#ffffff' },
     { x: 0.25, z: 220, type: 'retro', color: '#dfc28d' },
     { x: 0.65, z: 580, type: 'van', color: '#4aa3df' }
   ];
 
-  // ================= دوال رسم المشهد المطابق للصورة =================
+  // دوال الرسم مع الاستفادة من الكائنات المخزنة
   function drawSkyAndSun() {
-    // تدرج سماء وقت العصر السكندري الدافئ
-    const sky = ctx.createLinearGradient(0, 0, 0, height * 0.45);
-    sky.addColorStop(0, '#e8b87e');
-    sky.addColorStop(0.5, '#f3cf9c');
-    sky.addColorStop(1, '#fadcb0');
-    ctx.fillStyle = sky;
+    ctx.fillStyle = skyGradient;
     ctx.fillRect(0, 0, width, height * 0.45);
   }
 
   function drawStanleyBridgeHorizon(horizonY) {
-    // رسم كوبري ستانلي بقبابه وأبراجه الأندلسية الشهيرة
     const bridgeX = width * 0.32;
     ctx.save();
     ctx.fillStyle = '#caa376';
     ctx.strokeStyle = '#2b231d';
     ctx.lineWidth = 2.5;
 
-    // جسم الكوبري الممتد فوق البحر
     ctx.beginPath();
     ctx.moveTo(0, horizonY - 10);
     ctx.lineTo(bridgeX + 80, horizonY - 18);
@@ -473,7 +480,6 @@
     ctx.fill();
     ctx.stroke();
 
-    // أروقة وأقواس الكوبري الحجرية
     for (let x = 40; x < bridgeX + 60; x += 35) {
       ctx.fillStyle = '#4898aa';
       ctx.beginPath();
@@ -482,18 +488,17 @@
       ctx.stroke();
     }
 
-    // أبراج ستانلي المميزة (البرج الأول والثاني)
-    [bridgeX - 45, bridgeX + 35].forEach(tx => {
+    const towerOffsets = [bridgeX - 45, bridgeX + 35];
+    for (let i = 0; i < 2; i++) {
+      const tx = towerOffsets[i];
       ctx.fillStyle = '#d2ad82';
       ctx.fillRect(tx, horizonY - 85, 28, 90);
       ctx.strokeRect(tx, horizonY - 85, 28, 90);
 
-      // بلكونة البرج
       ctx.fillStyle = '#b64d2e';
       ctx.fillRect(tx - 3, horizonY - 60, 34, 6);
       ctx.strokeRect(tx - 3, horizonY - 60, 34, 6);
 
-      // قبة البرج الهرمية الحمراء
       ctx.beginPath();
       ctx.moveTo(tx - 4, horizonY - 85);
       ctx.lineTo(tx + 14, horizonY - 118);
@@ -501,18 +506,12 @@
       ctx.closePath();
       ctx.fill();
       ctx.stroke();
-    });
+    }
     ctx.restore();
   }
 
   function drawSeaAndBeach(horizonY) {
-    // مياه البحر التركوازية المضلعة (يسار الطريق)
-    const sea = ctx.createLinearGradient(0, horizonY, width * 0.35, height);
-    sea.addColorStop(0, '#53a8be');
-    sea.addColorStop(0.6, '#41b3ce');
-    sea.addColorStop(1, '#2ba4c2');
-
-    ctx.fillStyle = sea;
+    ctx.fillStyle = seaGradient;
     ctx.beginPath();
     ctx.moveTo(0, horizonY);
     ctx.lineTo(width * 0.38, horizonY);
@@ -520,7 +519,6 @@
     ctx.lineTo(0, height);
     ctx.fill();
 
-    // تكسر أمواج البحر البيضاء
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -528,7 +526,6 @@
     ctx.bezierCurveTo(width * 0.15, horizonY + 55, width * 0.1, horizonY + 120, width * 0.22, height * 0.65);
     ctx.stroke();
 
-    // رمال الشاطئ الذهبية
     ctx.fillStyle = '#f0cf98';
     ctx.strokeStyle = '#2b231d';
     ctx.lineWidth = 2;
@@ -541,7 +538,6 @@
   }
 
   function drawCornichePromenade(horizonY) {
-    // رصيف المشاة الواسع
     ctx.fillStyle = '#ceb991';
     ctx.strokeStyle = '#2b231d';
     ctx.lineWidth = 2.5;
@@ -554,7 +550,6 @@
     ctx.fill();
     ctx.stroke();
 
-    // سور الكورنيش الحجري الأبيض
     ctx.fillStyle = '#f3ede0';
     ctx.beginPath();
     ctx.moveTo(width * 0.36, horizonY);
@@ -564,52 +559,43 @@
     ctx.fill();
     ctx.stroke();
 
-    // أكشاك الكورنيش الخشبية والنخيل
     ctx.fillStyle = '#9b5b33';
     ctx.fillRect(width * 0.25, height * 0.62, 45, 38);
     ctx.strokeRect(width * 0.25, height * 0.62, 45, 38);
-    // سقف الكشك
     ctx.fillStyle = '#4c2d1b';
     ctx.fillRect(width * 0.23, height * 0.61, 49, 7);
   }
 
   function drawBuildings(horizonY) {
-    // عمارات الإسكندرية التراثية (يمين الطريق)
-    const buildings = [
-      { w: 85, h: 220, color: '#f3d1a4', x: width * 0.68 },
-      { w: 90, h: 270, color: '#de8951', x: width * 0.77 },
-      { w: 105, h: 320, color: '#d9a36d', x: width * 0.86 },
-      { w: 110, h: 350, color: '#f4cca2', x: width * 0.95 }
-    ];
-
-    buildings.forEach(b => {
+    for (let i = 0; i < STATIC_BUILDINGS.length; i++) {
+      const b = STATIC_BUILDINGS[i];
+      const bx = width * b.xRatio;
+      const bw = width * b.wRatio;
       const topY = horizonY - b.h + 80;
+
       ctx.fillStyle = b.color;
       ctx.strokeStyle = '#2b231d';
       ctx.lineWidth = 3;
-      ctx.fillRect(b.x, topY, b.w, height - topY);
-      ctx.strokeRect(b.x, topY, b.w, height - topY);
+      ctx.fillRect(bx, topY, bw, height - topY);
+      ctx.strokeRect(bx, topY, bw, height - topY);
 
-      // البلكونات والشبابيك الكرتونية
       for (let by = topY + 25; by < height * 0.75; by += 35) {
         ctx.fillStyle = '#3a2e26';
-        ctx.fillRect(b.x + 12, by, 22, 18);
+        ctx.fillRect(bx + 12, by, 22, 18);
         ctx.fillStyle = '#ffffff';
-        ctx.fillRect(b.x + 8, by + 12, 30, 8);
-        ctx.strokeRect(b.x + 8, by + 12, 30, 8);
+        ctx.fillRect(bx + 8, by + 12, 30, 8);
+        ctx.strokeRect(bx + 8, by + 12, 30, 8);
       }
 
-      // لافتة متجر مصرية
       if (b.color === '#de8951') {
         ctx.fillStyle = '#f1c40f';
-        ctx.fillRect(b.x + 6, horizonY + 20, 55, 18);
-        ctx.strokeRect(b.x + 6, horizonY + 20, 55, 18);
+        ctx.fillRect(bx + 6, horizonY + 20, 55, 18);
+        ctx.strokeRect(bx + 6, horizonY + 20, 55, 18);
       }
-    });
+    }
   }
 
   function drawRoad(horizonY) {
-    // الأسفلت الرمادي الكرتوني مع الانحناء نحو كوبري ستانلي
     ctx.fillStyle = '#4f4f56';
     ctx.strokeStyle = '#2b231d';
     ctx.lineWidth = 3;
@@ -622,7 +608,6 @@
     ctx.fill();
     ctx.stroke();
 
-    // الخطوط المتقطعة والمزدوجة
     const laneX = width * 0.56;
     ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 5;
@@ -634,7 +619,6 @@
     ctx.stroke();
     ctx.setLineDash([]);
 
-    // خط الأمان الأصفر على الأطراف
     ctx.strokeStyle = '#f1c40f';
     ctx.lineWidth = 4;
     ctx.beginPath();
@@ -644,7 +628,6 @@
     ctx.lineTo(width * 0.95, height);
     ctx.stroke();
 
-    // أعمدة الإنارة المزدوجة على الجزيرة الوسطى
     for (let ly = horizonY + 30; ly < height * 0.85; ly += 75) {
       const lx = width * 0.55 + (ly - horizonY) * 0.16;
       ctx.strokeStyle = '#2b231d';
@@ -660,18 +643,15 @@
   }
 
   function drawAlexTaxi(x, y, scale) {
-    // التاكسي السكندري الأصفر والأسود المطابق للصورة
     ctx.save();
     ctx.translate(x, y);
     ctx.scale(scale, scale);
 
-    // ظل السيارة
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath();
     ctx.ellipse(0, 36, 42, 12, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // جسم السيارة الأصفر
     ctx.fillStyle = '#f1c40f';
     ctx.strokeStyle = '#1a1a1a';
     ctx.lineWidth = 3.5;
@@ -682,28 +662,24 @@
     ctx.fill();
     ctx.stroke();
 
-    // جوانب سوداء (التاكسي السكندري الكلاسيكي)
     ctx.fillStyle = '#222222';
     ctx.fillRect(-36, -2, 10, 37);
     ctx.strokeRect(-36, -2, 10, 37);
     ctx.fillRect(26, -2, 10, 37);
     ctx.strokeRect(26, -2, 10, 37);
 
-    // الزجاج الخلفي والسقف الأسود
     ctx.fillStyle = '#1c1c1c';
     ctx.beginPath();
     ctx.roundRect(-28, -32, 56, 26, 8);
     ctx.fill();
     ctx.stroke();
 
-    // زجاج الكابينة العاكس
     ctx.fillStyle = '#659dbd';
     ctx.beginPath();
     ctx.roundRect(-24, -28, 48, 18, 4);
     ctx.fill();
     ctx.stroke();
 
-    // لافتة TAXI الصفراء المضيئة
     ctx.fillStyle = '#f39c12';
     ctx.fillRect(-14, -40, 28, 10);
     ctx.strokeRect(-14, -40, 28, 10);
@@ -711,12 +687,10 @@
     ctx.font = 'bold 8px sans-serif';
     ctx.fillText('TAXI', -10, -32);
 
-    // النمرة المصرية الزرقاء
     ctx.fillStyle = '#2980b9';
     ctx.fillRect(-12, 20, 24, 10);
     ctx.strokeRect(-12, 20, 24, 10);
 
-    // الفوانيس الخلفية الحمراء
     ctx.fillStyle = '#e74c3c';
     ctx.fillRect(-32, 12, 8, 12);
     ctx.strokeRect(-32, 12, 8, 12);
@@ -726,26 +700,25 @@
     ctx.restore();
   }
 
-  function drawTrafficCar(car) {
+  function drawTrafficCar(c) {
     const horizonY = height * 0.42;
-    const progress = 1 - car.z / 700;
+    const progress = 1 - c.z / 700;
     if (progress <= 0 || progress >= 1) return;
 
     const cy = horizonY + progress * (height * 0.55);
     const roadMid = width * 0.52 + (cy - horizonY) * 0.15;
-    const cx = roadMid + car.x * (width * 0.28 * progress);
+    const cx = roadMid + c.x * (width * 0.28 * progress);
     const scale = 0.35 + progress * 0.65;
 
     ctx.save();
     ctx.translate(cx, cy);
     ctx.scale(scale, scale);
 
-    ctx.fillStyle = car.color;
+    ctx.fillStyle = c.color;
     ctx.strokeStyle = '#222';
     ctx.lineWidth = 3;
 
-    if (car.type === 'microbus') {
-      // ميكروباص تويوتا سقف عالي أبيض بشريط أزرق
+    if (c.type === 'microbus') {
       ctx.beginPath();
       ctx.roundRect(-26, -35, 52, 50, 6);
       ctx.fill();
@@ -753,7 +726,6 @@
       ctx.fillStyle = '#2980b9';
       ctx.fillRect(-26, -5, 52, 8);
     } else {
-      // سيارة عادية
       ctx.beginPath();
       ctx.roundRect(-22, -15, 44, 32, 6);
       ctx.fill();
@@ -762,57 +734,67 @@
     ctx.restore();
   }
 
-  // ================= دورة اللعبة والتحديث (Game Loop) =================
+  // مؤقت الإفيهات مع تنظيف الذاكرة
   const needle = document.getElementById('needle');
   const digitalSpeed = document.getElementById('digital-speed');
   const epheBalloon = document.getElementById('ephe-balloon');
 
-  // إظهار إفيه كل فترة
   const ephes = [
     "وديني عند حمو علاء أخدلي صورتين!",
     "على مهلك يا أسطى، إحنا مش في سباق!",
     "يا عم افتح التكييف، إحنا بنسيح!",
     "يا أسطى العداد بيجري أسرع من العربية!"
   ];
+  let hideEpheTimeout = null;
+
   setInterval(() => {
     epheBalloon.innerText = ephes[Math.floor(Math.random() * ephes.length)];
     epheBalloon.classList.add('show');
-    setTimeout(() => epheBalloon.classList.remove('show'), 4000);
+    clearTimeout(hideEpheTimeout);
+    hideEpheTimeout = setTimeout(() => epheBalloon.classList.remove('show'), 4000);
   }, 14000);
 
-  function loop() {
+  // حلقة اللعبة المعتمدة على Delta Time لثبات الإطارات
+  let lastTime = performance.now();
+
+  function loop(currentTime) {
     requestAnimationFrame(loop);
 
-    // معالجة السرعة
+    const rawDelta = (currentTime - lastTime) / 1000;
+    lastTime = currentTime;
+    // تحديد حد أقصى للـ delta لمنع القفزات الكبيرة عند تغيير التبويب
+    const dt = Math.min(rawDelta, 0.1) * 60;
+
+    // حساب السرعة المتناسقة زمنياً
     if (inputs.gas) {
-      speed = Math.min(speed + (inputs.nitro ? 1.4 : 0.7), maxSpeed);
+      speed = Math.min(speed + (inputs.nitro ? 1.4 : 0.7) * dt, maxSpeed);
     } else if (inputs.brake) {
-      speed = Math.max(speed - 1.6, 0);
+      speed = Math.max(speed - 1.6 * dt, 0);
     } else {
-      speed = Math.max(speed - 0.25, 0);
+      speed = Math.max(speed - 0.25 * dt, 0);
     }
 
-    roadOffset += speed * 0.4;
+    roadOffset += speed * 0.4 * dt;
 
-    // توجيه السيارة بالدركسيون
     if (speed > 1) {
-      playerX -= (steerAngle / 50) * 0.015;
+      playerX -= (steerAngle / 50) * 0.015 * dt;
       playerX = Math.max(-0.6, Math.min(0.7, playerX));
     }
 
-    // تحديث حركة سيارات المرور
-    traffic.forEach(c => {
-      c.z -= speed * 0.3;
+    // حركة سيارات المرور
+    for (let i = 0; i < traffic.length; i++) {
+      const c = traffic[i];
+      c.z -= speed * 0.3 * dt;
       if (c.z < 50) c.z = 700 + Math.random() * 200;
-    });
+    }
 
-    // تحديث عداد السرعة (أعلى اليسار)
+    // تحديث عداد السرعة التناظري والرقمي
     const kmh = Math.round(speed);
     digitalSpeed.innerText = kmh.toString().padStart(2, '0');
     const needleDeg = -110 + (kmh / 80) * 220;
     needle.style.transform = `rotate(${needleDeg}deg)`;
 
-    // ================= الرسم =================
+    // الرسم
     ctx.clearRect(0, 0, width, height);
     const horizonY = height * 0.42;
 
@@ -823,15 +805,15 @@
     drawCornichePromenade(horizonY);
     drawRoad(horizonY);
 
-    // رسم سيارات المرور
-    traffic.forEach(drawTrafficCar);
+    for (let i = 0; i < traffic.length; i++) {
+      drawTrafficCar(traffic[i]);
+    }
 
-    // رسم تاكسي اللاعب في المنتصف السفلي
     const taxiScreenX = width * 0.52 + playerX * (width * 0.26);
     drawAlexTaxi(taxiScreenX, height * 0.76, 1.25);
   }
 
-  loop();
+  requestAnimationFrame(loop);
 </script>
 </body>
 </html>
